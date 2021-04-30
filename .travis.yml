@@ -1,0 +1,55 @@
+dist: bionic
+language: rust
+rust:
+  - stable
+env:
+  global:
+    - NODE_VERSION="v14.7.0"
+    - SOLANA_VERSION="v1.6.6"
+    - ANCHOR_VERSION="v0.4.5"
+git:
+  submodules: true
+
+before_deploy:
+  - anchor build --verifiable
+  - echo "### SHA256 Checksums" > release_notes.md
+  - sha256sum target/deploy/swap.so > binary.txt
+  - sha256sum target/idl/swap.json > idl.txt
+  - cat *.txt >> release_notes.md
+  - echo "" >> release_notes.md
+  - echo "Built with Anchor [${ANCHOR_VERSION}](https://github.com/project-serum/anchor/releases/tag/${ANCHOR_VERSION})." >> release_notes.md
+
+deploy:
+  provider: releases
+  edge: true
+  file:
+    - "target/deploy/swap.so"
+    - "target/idl/swap.json"
+  release_notes_file: release_notes.md
+  skip_cleanup: true
+  on:
+    tags: true
+  api_key:
+    secure: 1ixwvPLZd2ZleVAv0QuZcUdZW7JV94TBkCP2+UvJJSqi6kX2HDK5zzVQu5zBM6jOpmpjKUJpLRq6V56/Uj6tGt2w5mfvjeiu3YA5o6WUsMRsvdx+NbnIEIPBfX1ECDhn15FlfC+beGw5oewgjrf59t4Lk9KO5I7VkxdoUJwP0uWRp034fG85JufFziYCkJTobEuCDWthe0p7eym/4rC1nkG7RoOvAwD111QiatEi9AP6nBsi/wokY4u/qvcFjgNxMnpDi7NNLaLLZGDKk/mfpvvnRpYvGRf2xUnzsvSx68m9ycYGNiHrg+YbKVMFa78VbdJepuKheFe1ArpYPd6d0zhybvdsEYUB7PFx/4N5g639NpGX/AgYGtNLGD6pYOBy5cvsrs7JPymcQo1e7HIvtElW8wldSv5964WhCzX19E+/samPiRxVKXtoc3ognebM6IQaxEOtg4aXeV6VPvMvwcSn7V+lrdlMIZSW0Z7RCmsw668icb4yo7Kqt3VCVVuelrN+xvio78twsYcLeNWE2xxbpb1aEd/ZPWndij1+/O7gyheJHH0kkxU8mimrOe+K0XPn6Zk2yfWutsBzC3RdR/1qHR7JKfGN0XbXUrmbSnjcW5M7vVApDglymT9LLajMlvIcQIdS0nwyDfNkJDgVwxJgrTJpXVgfyHScC1AYJO4=
+
+_defaults: &defaults
+  before_install:
+  - nvm install $NODE_VERSION
+  - npm install -g mocha
+  - npm install -g @project-serum/anchor
+  - npm install -g @project-serum/serum
+  - npm install -g @project-serum/common
+  - npm install -g @solana/spl-token
+  - sudo apt-get install -y pkg-config build-essential libudev-dev
+  - sh -c "$(curl -sSfL https://release.solana.com/${SOLANA_VERSION}/install)"
+  - export PATH="/home/travis/.local/share/solana/install/active_release/bin:$PATH"
+  - export NODE_PATH="/home/travis/.nvm/versions/node/${NODE_VERSION}/lib/node_modules/:${NODE_PATH}"
+  - yes | solana-keygen new
+  - cargo install --git https://github.com/project-serum/anchor --tag ${ANCHOR_VERSION} anchor-cli --locked
+
+jobs:
+  include:
+    - <<: *defaults
+      name: Runs the tests
+      script:
+        - pushd deps/serum-dex/dex && cargo build-bpf && popd && anchor test
