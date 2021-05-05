@@ -1,5 +1,6 @@
 const assert = require("assert");
 const anchor = require("@project-serum/anchor");
+const Account = anchor.web3.Account;
 const BN = anchor.BN;
 const OpenOrders = require("@project-serum/serum").OpenOrders;
 const TOKEN_PROGRAM_ID = require("@solana/spl-token").TOKEN_PROGRAM_ID;
@@ -78,6 +79,61 @@ describe("swap", () => {
         orderPayerTokenAccount: ORDERBOOK_ENV.godA,
       },
     };
+  });
+
+  // For testing the initialization and closing of the open orders account.
+  const ooAccount = new Account();
+
+  it("Initializes an open orders account", async () => {
+    const marketA = ORDERBOOK_ENV.marketA;
+    const openOrders = ooAccount;
+    await program.rpc.initAccount({
+      accounts: {
+        openOrders: openOrders.publicKey,
+        authority: program.provider.wallet.publicKey,
+        market: marketA._decoded.ownAddress,
+        dexProgram: utils.DEX_PID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      },
+      instructions: [
+        await OpenOrders.makeCreateAccountTransaction(
+          program.provider.connection,
+          marketA._decoded.ownAddress,
+          program.provider.wallet.publicKey,
+          openOrders.publicKey,
+          utils.DEX_PID
+        ),
+      ],
+      signers: [openOrders],
+    });
+    const accountInfo = await program.provider.connection.getAccountInfo(
+      openOrders.publicKey
+    );
+    const serumPadding = accountInfo.data.slice(0, 5);
+    const accountFlags = accountInfo.data[5];
+    // b"serum".
+    assert.ok(serumPadding.equals(Buffer.from([115, 101, 114, 117, 109])));
+    // Initialized | OpenOrders.
+    assert.ok(accountFlags === 5);
+  });
+
+  it("Closes an open orders account", async () => {
+    const marketA = ORDERBOOK_ENV.marketA;
+    const openOrders = ooAccount;
+    await program.rpc.closeAccount({
+      accounts: {
+        openOrders: openOrders.publicKey,
+        authority: program.provider.wallet.publicKey,
+        destination: program.provider.wallet.publicKey,
+        market: marketA._decoded.ownAddress,
+        dexProgram: utils.DEX_PID,
+      },
+    });
+
+    const accountInfo = await program.provider.connection.getAccountInfo(
+      openOrders.publicKey
+    );
+    assert.ok(accountInfo === null);
   });
 
   it("Swaps from USDC to Token A", async () => {
