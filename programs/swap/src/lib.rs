@@ -55,8 +55,8 @@ pub mod swap {
         // Execute trade.
         let orderbook: OrderbookClient<'info> = (&*ctx.accounts).into();
         match side {
-            Side::Bid => orderbook.buy(amount, referral.clone())?,
-            Side::Ask => orderbook.sell(amount, referral.clone())?,
+            Side::Bid => orderbook.buy(amount, None)?,
+            Side::Ask => orderbook.sell(amount, None)?,
         };
         orderbook.settle(referral)?;
 
@@ -120,7 +120,7 @@ pub mod swap {
 
             // Execute the trade.
             let orderbook = ctx.accounts.orderbook_from();
-            orderbook.sell(amount, referral.clone())?;
+            orderbook.sell(amount, None)?;
             orderbook.settle(referral.clone())?;
 
             // Token balances after the trade.
@@ -142,7 +142,7 @@ pub mod swap {
 
             // Execute the trade.
             let orderbook = ctx.accounts.orderbook_to();
-            orderbook.buy(sell_proceeds, referral.clone())?;
+            orderbook.buy(sell_proceeds, None)?;
             orderbook.settle(referral)?;
 
             // Token balances after the trade.
@@ -272,7 +272,11 @@ impl<'info> OrderbookClient<'info> {
     //
     // `base_amount` is the "native" amount of the base currency, i.e., token
     // amount including decimals.
-    fn sell(&self, base_amount: u64, referral: Option<AccountInfo<'info>>) -> ProgramResult {
+    fn sell(
+        &self,
+        base_amount: u64,
+        srm_msrm_discount: Option<AccountInfo<'info>>,
+    ) -> ProgramResult {
         let limit_price = 1;
         let max_coin_qty = {
             // The loaded market must be dropped before CPI.
@@ -285,7 +289,7 @@ impl<'info> OrderbookClient<'info> {
             max_coin_qty,
             max_native_pc_qty,
             Side::Ask,
-            referral,
+            srm_msrm_discount,
         )
     }
 
@@ -294,7 +298,11 @@ impl<'info> OrderbookClient<'info> {
     //
     // `quote_amount` is the "native" amount of the quote currency, i.e., token
     // amount including decimals.
-    fn buy(&self, quote_amount: u64, referral: Option<AccountInfo<'info>>) -> ProgramResult {
+    fn buy(
+        &self,
+        quote_amount: u64,
+        srm_msrm_discount: Option<AccountInfo<'info>>,
+    ) -> ProgramResult {
         let limit_price = u64::MAX;
         let max_coin_qty = u64::MAX;
         let max_native_pc_qty = quote_amount;
@@ -303,7 +311,7 @@ impl<'info> OrderbookClient<'info> {
             max_coin_qty,
             max_native_pc_qty,
             Side::Bid,
-            referral,
+            srm_msrm_discount,
         )
     }
 
@@ -321,7 +329,7 @@ impl<'info> OrderbookClient<'info> {
         max_coin_qty: u64,
         max_native_pc_qty: u64,
         side: Side,
-        referral: Option<AccountInfo<'info>>,
+        srm_msrm_discount: Option<AccountInfo<'info>>,
     ) -> ProgramResult {
         // Client order id is only used for cancels. Not used here so hardcode.
         let client_order_id = 0;
@@ -345,8 +353,8 @@ impl<'info> OrderbookClient<'info> {
             rent: self.rent.clone(),
         };
         let mut ctx = CpiContext::new(self.dex_program.clone(), dex_accs);
-        if let Some(referral) = referral {
-            ctx = ctx.with_remaining_accounts(vec![referral]);
+        if let Some(srm_msrm_discount) = srm_msrm_discount {
+            ctx = ctx.with_remaining_accounts(vec![srm_msrm_discount]);
         }
         dex::new_order_v3(
             ctx,
