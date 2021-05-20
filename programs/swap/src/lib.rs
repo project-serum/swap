@@ -522,7 +522,7 @@ pub struct DidSwap {
     pub authority: Pubkey,
 }
 
-// An exchange rate for swap *from* one token *to* another.
+// An exchange rate for swapping *from* one token *to* another.
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ExchangeRate {
     // The amount of *to* tokens one should receive for a single *from token.
