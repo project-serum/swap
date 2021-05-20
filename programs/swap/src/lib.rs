@@ -525,9 +525,9 @@ pub struct DidSwap {
 // An exchange rate for swap *from* one token *to* another.
 #[derive(AnchorSerialize, AnchorDeserialize)]
 pub struct ExchangeRate {
-    // The price of a single *from* token in units of *to* tokens. This number
-    // must be in native *to* units with the same amount of decimals as the
-    // *to* mint.
+    // The amount of *to* tokens one should receive for a single *from token.
+    // This number must be in native *to* units with the same amount of decimals
+    // as the *to* mint.
     rate: u64,
     // Number of decimals of the *from* token's mint.
     decimals: u8,
