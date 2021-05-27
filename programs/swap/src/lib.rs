@@ -27,17 +27,16 @@ pub mod swap {
     ///
     /// Arguments:
     ///
-    /// * `side`                     - The direction to swap.
-    /// * `amount`                   - The amount to swap *from*
-    /// * `min_expected_swap_amount` - The minimum amount of the *to* token the
-    ///    client expects to receive from the swap. The instruction fails if
-    ///    execution would result in less.
+    /// * `side`              - The direction to swap.
+    /// * `amount`            - The amount to swap *from*
+    /// * `min_exchange_rate` - The exchange rate to use when determining
+    ///    whether the transaction should abort.
     #[access_control(is_valid_swap(&ctx))]
     pub fn swap<'info>(
         ctx: Context<'_, '_, '_, 'info, Swap<'info>>,
         side: Side,
         amount: u64,
-        min_expected_swap_amount: u64,
+        min_exchange_rate: ExchangeRate,
     ) -> Result<()> {
         // Optional referral account (earns a referral fee).
         let referral = ctx.remaining_accounts.iter().next().map(Clone::clone);
@@ -72,7 +71,7 @@ pub mod swap {
         apply_risk_checks(DidSwap {
             authority: *ctx.accounts.authority.key,
             given_amount: amount,
-            min_expected_swap_amount,
+            min_exchange_rate,
             from_amount,
             to_amount,
             spill_amount: 0,
@@ -99,15 +98,14 @@ pub mod swap {
     ///
     /// Arguments:
     ///
-    /// * `amount`                  - The amount to swap *from*.
-    /// * `min_expected_swap_amount - The minimum amount of the *to* token the
-    ///    client expects to receive from the swap. The instruction fails if
-    ///    execution would result in less.
+    /// * `amount`            - The amount to swap *from*.
+    /// * `min_exchange_rate` - The exchange rate to use when determining
+    ///    whether the transaction should abort.
     #[access_control(is_valid_swap_transitive(&ctx))]
     pub fn swap_transitive<'info>(
         ctx: Context<'_, '_, '_, 'info, SwapTransitive<'info>>,
         amount: u64,
-        min_expected_swap_amount: u64,
+        min_exchange_rate: ExchangeRate,
     ) -> Result<()> {
         // Optional referral account (earns a referral fee).
         let referral = ctx.remaining_accounts.iter().next().map(Clone::clone);
@@ -159,7 +157,7 @@ pub mod swap {
         // Safety checks.
         apply_risk_checks(DidSwap {
             given_amount: amount,
-            min_expected_swap_amount,
+            min_exchange_rate,
             from_amount,
             to_amount,
             spill_amount,
@@ -174,12 +172,44 @@ pub mod swap {
 }
 
 // Asserts the swap event is valid.
-fn apply_risk_checks(event: DidSwap) -> Result<()> {
-    // Reject if the resulting amount is less than the client's expectation.
-    if event.to_amount < event.min_expected_swap_amount {
+fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
+    emit!(event);
+
+    let (to_amount, min_expected_amount) = {
+        // Use the exchange rate to calculate the client's expectation.
+        // This number has
+        //
+        // `decimals(from_mint) + decimals(to_mint`)`
+        //
+        // decimal places.
+        let min_expected_amount = (event.from_amount as u128)
+            .checked_mul(event.min_exchange_rate.rate as u128)
+            .unwrap();
+
+        // Translate the `to_amount` into a common number of decimals with
+        // `min_expected_amount`.
+        //
+        // The exchange rate given must always have decimals equal to the
+        // `to_mint` decimals, guaranteeing the `min_expected_amount`
+        // always has decimals equal to
+        //
+        // `decimals(from_mint) + decimals(to_mint)`.
+        //
+        let to_amount = u128::from(event.to_amount)
+            .checked_mul(
+                10u128
+                    .checked_pow(event.min_exchange_rate.decimals.into())
+                    .unwrap(),
+            )
+            .unwrap();
+        (to_amount, min_expected_amount)
+    };
+
+    // Abort if the resulting amount is less than the client's expectation.
+    if to_amount < min_expected_amount {
         return Err(ErrorCode::SlippageExceeded.into());
     }
-    emit!(event);
+
     Ok(())
 }
 
@@ -472,9 +502,9 @@ fn _is_valid_swap<'info>(from: &AccountInfo<'info>, to: &AccountInfo<'info>) -> 
 pub struct DidSwap {
     // User given (max) amount to swap.
     pub given_amount: u64,
-    // The minimum amount of the *to* token expected to be received from
-    // executing the swap.
-    pub min_expected_swap_amount: u64,
+    // The minimum exchange rate for swapping `from_amount` to `to_amount` in
+    // native units with decimals equal to the `to_amount`'s mint.
+    pub min_exchange_rate: ExchangeRate,
     // Amount of the `from` token sold.
     pub from_amount: u64,
     // Amount of the `to` token purchased.
@@ -490,6 +520,17 @@ pub struct DidSwap {
     pub quote_mint: Pubkey,
     // User that signed the transaction.
     pub authority: Pubkey,
+}
+
+// An exchange rate for swapping *from* one token *to* another.
+#[derive(AnchorSerialize, AnchorDeserialize)]
+pub struct ExchangeRate {
+    // The amount of *to* tokens one should receive for a single *from token.
+    // This number must be in native *to* units with the same amount of decimals
+    // as the *to* mint.
+    rate: u64,
+    // Number of decimals of the *from* token's mint.
+    decimals: u8,
 }
 
 #[error]

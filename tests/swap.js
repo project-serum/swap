@@ -93,30 +93,35 @@ describe("swap", () => {
       program.provider,
       [ORDERBOOK_ENV.godA, ORDERBOOK_ENV.godUsdc],
       async () => {
-        await program.rpc.swap(Side.Bid, swapAmount, new BN(1.0), {
-          accounts: SWAP_USDC_A_ACCOUNTS,
-          instructions: [
-            // First order to this market so one must create the open orders account.
-            await OpenOrders.makeCreateAccountTransaction(
-              program.provider.connection,
-              marketA._decoded.ownAddress,
-              program.provider.wallet.publicKey,
-              openOrdersA.publicKey,
-              utils.DEX_PID
-            ),
-            // Might as well create the second open orders account while we're here.
-            // In prod, this should actually be done within the same tx as an
-            // order to market B.
-            await OpenOrders.makeCreateAccountTransaction(
-              program.provider.connection,
-              ORDERBOOK_ENV.marketB._decoded.ownAddress,
-              program.provider.wallet.publicKey,
-              openOrdersB.publicKey,
-              utils.DEX_PID
-            ),
-          ],
-          signers: [openOrdersA, openOrdersB],
-        });
+        await program.rpc.swap(
+          Side.Bid,
+          swapAmount,
+          { rate: new BN(1.0), decimals: 6 },
+          {
+            accounts: SWAP_USDC_A_ACCOUNTS,
+            instructions: [
+              // First order to this market so one must create the open orders account.
+              await OpenOrders.makeCreateAccountTransaction(
+                program.provider.connection,
+                marketA._decoded.ownAddress,
+                program.provider.wallet.publicKey,
+                openOrdersA.publicKey,
+                utils.DEX_PID
+              ),
+              // Might as well create the second open orders account while we're here.
+              // In prod, this should actually be done within the same tx as an
+              // order to market B.
+              await OpenOrders.makeCreateAccountTransaction(
+                program.provider.connection,
+                ORDERBOOK_ENV.marketB._decoded.ownAddress,
+                program.provider.wallet.publicKey,
+                openOrdersB.publicKey,
+                utils.DEX_PID
+              ),
+            ],
+            signers: [openOrdersA, openOrdersB],
+          }
+        );
       }
     );
 
@@ -141,7 +146,7 @@ describe("swap", () => {
         await program.rpc.swap(
           Side.Ask,
           new BN(swapAmount * 10 ** 6),
-          new BN(swapAmount),
+          { rate: new BN(5 * 10 ** 6), decimals: 6 },
           {
             accounts: SWAP_A_USDC_ACCOUNTS,
           }
@@ -164,7 +169,7 @@ describe("swap", () => {
         // Perform the actual swap.
         await program.rpc.swapTransitive(
           new BN(swapAmount * 10 ** 6),
-          new BN(swapAmount - 1),
+          { rate: new BN(0.98 * 10 ** 6), decimals: 6 },
           {
             accounts: {
               from: {
@@ -225,7 +230,7 @@ describe("swap", () => {
         // Perform the actual swap.
         await program.rpc.swapTransitive(
           new BN(swapAmount * 10 ** 6),
-          new BN(swapAmount - 1),
+          { rate: new BN(0.9 * 10 ** 6), decimals: 6 },
           {
             accounts: {
               from: {
