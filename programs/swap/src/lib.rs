@@ -1,10 +1,11 @@
 //! Program to perform instantly settled token swaps on the Serum DEX.
 //!
 //! Before using any instruction here, a user must first create an open orders
-//! account on all markets being used. This only needs to be done once. As a
-//! convention established by the DEX, this should be done via the system
-//! program create account instruction in the same transaction as the user's
-//! first trade. Then, the DEX will lazily initialize the open orders account.
+//! account on all markets being used. This only needs to be done once, either
+//! via the system program create account instruction in the same transaction
+//! as the user's first trade or via the explicit `init_account` and
+//! `close_account` instructions provided here, which can be included in
+//! transactions.
 
 use anchor_lang::prelude::*;
 use anchor_spl::dex;
@@ -17,6 +18,22 @@ use std::num::NonZeroU64;
 #[program]
 pub mod swap {
     use super::*;
+
+    /// Convenience API to initialize an open orders account on the Serum DEX.
+    pub fn init_account<'info>(ctx: Context<'_, '_, '_, 'info, InitAccount<'info>>) -> Result<()> {
+        let ctx = CpiContext::new(ctx.accounts.dex_program.clone(), ctx.accounts.into());
+        dex::init_open_orders(ctx)?;
+        Ok(())
+    }
+
+    /// Convenience API to close an open orders account on the Serum DEX.
+    pub fn close_account<'info>(
+        ctx: Context<'_, '_, '_, 'info, CloseAccount<'info>>,
+    ) -> Result<()> {
+        let ctx = CpiContext::new(ctx.accounts.dex_program.clone(), ctx.accounts.into());
+        dex::close_open_orders(ctx)?;
+        Ok(())
+    }
 
     /// Swaps two tokens on a single A/B market, where A is the base currency
     /// and B is the quote currency. This is just a direct IOC trade that
@@ -213,6 +230,51 @@ fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct InitAccount<'info> {
+    #[account(mut)]
+    open_orders: AccountInfo<'info>,
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+    market: AccountInfo<'info>,
+    dex_program: AccountInfo<'info>,
+    rent: AccountInfo<'info>,
+}
+
+impl<'info> From<&mut InitAccount<'info>> for dex::InitOpenOrders<'info> {
+    fn from(accs: &mut InitAccount<'info>) -> dex::InitOpenOrders<'info> {
+        dex::InitOpenOrders {
+            open_orders: accs.open_orders.clone(),
+            authority: accs.authority.clone(),
+            market: accs.market.clone(),
+            rent: accs.rent.clone(),
+        }
+    }
+}
+
+#[derive(Accounts)]
+pub struct CloseAccount<'info> {
+    #[account(mut)]
+    open_orders: AccountInfo<'info>,
+    #[account(signer)]
+    authority: AccountInfo<'info>,
+    #[account(mut)]
+    destination: AccountInfo<'info>,
+    market: AccountInfo<'info>,
+    dex_program: AccountInfo<'info>,
+}
+
+impl<'info> From<&mut CloseAccount<'info>> for dex::CloseOpenOrders<'info> {
+    fn from(accs: &mut CloseAccount<'info>) -> dex::CloseOpenOrders<'info> {
+        dex::CloseOpenOrders {
+            open_orders: accs.open_orders.clone(),
+            authority: accs.authority.clone(),
+            destination: accs.destination.clone(),
+            market: accs.market.clone(),
+        }
+    }
+}
+
 // The only constraint imposed on these accounts is that the market's base
 // currency mint is not equal to the quote currency's. All other checks are
 // done by the DEX on CPI.
@@ -287,6 +349,7 @@ impl<'info> SwapTransitive<'info> {
 }
 
 // Client for sending orders to the Serum DEX.
+#[derive(Clone)]
 struct OrderbookClient<'info> {
     market: MarketAccounts<'info>,
     authority: AccountInfo<'info>,
@@ -368,21 +431,7 @@ impl<'info> OrderbookClient<'info> {
         // before giving up and posting the remaining unmatched order.
         let limit = 65535;
 
-        let dex_accs = dex::NewOrderV3 {
-            market: self.market.market.clone(),
-            open_orders: self.market.open_orders.clone(),
-            request_queue: self.market.request_queue.clone(),
-            event_queue: self.market.event_queue.clone(),
-            market_bids: self.market.bids.clone(),
-            market_asks: self.market.asks.clone(),
-            order_payer_token_account: self.market.order_payer_token_account.clone(),
-            open_orders_authority: self.authority.clone(),
-            coin_vault: self.market.coin_vault.clone(),
-            pc_vault: self.market.pc_vault.clone(),
-            token_program: self.token_program.clone(),
-            rent: self.rent.clone(),
-        };
-        let mut ctx = CpiContext::new(self.dex_program.clone(), dex_accs);
+        let mut ctx = CpiContext::new(self.dex_program.clone(), self.clone().into());
         if let Some(srm_msrm_discount) = srm_msrm_discount {
             ctx = ctx.with_remaining_accounts(vec![srm_msrm_discount]);
         }
@@ -416,6 +465,25 @@ impl<'info> OrderbookClient<'info> {
             ctx = ctx.with_remaining_accounts(vec![referral]);
         }
         dex::settle_funds(ctx)
+    }
+}
+
+impl<'info> From<OrderbookClient<'info>> for dex::NewOrderV3<'info> {
+    fn from(c: OrderbookClient<'info>) -> dex::NewOrderV3<'info> {
+        dex::NewOrderV3 {
+            market: c.market.market.clone(),
+            open_orders: c.market.open_orders.clone(),
+            request_queue: c.market.request_queue.clone(),
+            event_queue: c.market.event_queue.clone(),
+            market_bids: c.market.bids.clone(),
+            market_asks: c.market.asks.clone(),
+            order_payer_token_account: c.market.order_payer_token_account.clone(),
+            open_orders_authority: c.authority.clone(),
+            coin_vault: c.market.coin_vault.clone(),
+            pc_vault: c.market.pc_vault.clone(),
+            token_program: c.token_program.clone(),
+            rent: c.rent.clone(),
+        }
     }
 }
 

@@ -1,5 +1,7 @@
 const assert = require("assert");
 const anchor = require("@project-serum/anchor");
+const Account = anchor.web3.Account;
+const Transaction = anchor.web3.Transaction;
 const BN = anchor.BN;
 const OpenOrders = require("@project-serum/serum").OpenOrders;
 const TOKEN_PROGRAM_ID = require("@solana/spl-token").TOKEN_PROGRAM_ID;
@@ -80,6 +82,150 @@ describe("swap", () => {
     };
   });
 
+  // For testing the initialization and closing of the open orders account.
+  const ooAccount = new Account();
+
+  it("Initializes an open orders account", async () => {
+    // Balance before the tx.
+    const beforeAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    const marketA = ORDERBOOK_ENV.marketA;
+    const openOrders = ooAccount;
+
+    await program.rpc.initAccount({
+      accounts: {
+        openOrders: openOrders.publicKey,
+        authority: program.provider.wallet.publicKey,
+        market: marketA._decoded.ownAddress,
+        dexProgram: utils.DEX_PID,
+        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+      },
+      instructions: [
+        await OpenOrders.makeCreateAccountTransaction(
+          program.provider.connection,
+          marketA._decoded.ownAddress,
+          program.provider.wallet.publicKey,
+          openOrders.publicKey,
+          utils.DEX_PID
+        ),
+      ],
+      signers: [openOrders],
+    });
+
+    const accountInfo = await program.provider.connection.getAccountInfo(
+      openOrders.publicKey
+    );
+    const serumPadding = accountInfo.data.slice(0, 5);
+    const accountFlags = accountInfo.data[5];
+    // b"serum".
+    assert.ok(serumPadding.equals(Buffer.from([115, 101, 114, 117, 109])));
+    // Initialized | OpenOrders.
+    assert.ok(accountFlags === 5);
+
+    // Balance after the tx.
+    const afterAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    const solChange = beforeAccount.lamports - afterAccount.lamports;
+    // The fee to create and initialize the account toggles between these
+    // to for some reason? 64 lamports.
+    assert.ok(solChange === 23367808 || solChange === 23367744);
+  });
+
+  it("Closes an open orders account", async () => {
+    // Balance before the tx.
+    const beforeAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    const marketA = ORDERBOOK_ENV.marketA;
+    const openOrders = ooAccount;
+    await program.rpc.closeAccount({
+      accounts: {
+        openOrders: openOrders.publicKey,
+        authority: program.provider.wallet.publicKey,
+        destination: program.provider.wallet.publicKey,
+        market: marketA._decoded.ownAddress,
+        dexProgram: utils.DEX_PID,
+      },
+    });
+
+    // Check the account was garbage collected.
+    const accountInfo = await program.provider.connection.getAccountInfo(
+      openOrders.publicKey
+    );
+    assert.ok(accountInfo === null);
+
+    // Balance after the tx.
+    const afterAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    // Should get the rent exemption sol back.
+    const solChange = afterAccount.lamports - beforeAccount.lamports;
+    assert.ok(solChange === 23352768);
+  });
+
+  it("Does not pay rent exemption sol in a single transaction", async () => {
+    // Balance before the tx.
+    const beforeAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    // Build the tx.
+    const openOrders = new Account();
+    const marketA = ORDERBOOK_ENV.marketA;
+    const tx = new Transaction();
+    tx.add(
+      await OpenOrders.makeCreateAccountTransaction(
+        program.provider.connection,
+        marketA._decoded.ownAddress,
+        program.provider.wallet.publicKey,
+        openOrders.publicKey,
+        utils.DEX_PID
+      )
+    );
+    tx.add(
+      program.instruction.initAccount({
+        accounts: {
+          openOrders: openOrders.publicKey,
+          authority: program.provider.wallet.publicKey,
+          market: marketA._decoded.ownAddress,
+          dexProgram: utils.DEX_PID,
+          rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+        },
+      })
+    );
+    tx.add(
+      program.instruction.closeAccount({
+        accounts: {
+          openOrders: openOrders.publicKey,
+          authority: program.provider.wallet.publicKey,
+          destination: program.provider.wallet.publicKey,
+          market: marketA._decoded.ownAddress,
+          dexProgram: utils.DEX_PID,
+        },
+      })
+    );
+
+    // Send it.
+    await program.provider.send(tx, [openOrders]);
+
+    // Balance after the transaction.
+    const afterAccount = await program.provider.connection.getAccountInfo(
+      program.provider.wallet.publicKey
+    );
+
+    // Only paid transaction fees. No rent exemption sol.
+    const solChange = beforeAccount.lamports - afterAccount.lamports;
+    // The fee to create the account toggles between +- 64 lamports.
+    // So we must adjust for that here.
+    assert.ok(solChange === 10048 || solChange === 9984);
+  });
+
   it("Swaps from USDC to Token A", async () => {
     const marketA = ORDERBOOK_ENV.marketA;
 
@@ -124,9 +270,8 @@ describe("swap", () => {
         );
       }
     );
-
     assert.ok(tokenAChange === expectedResultantAmount);
-    assert.ok(usdcChange === -swapAmount.toNumber() / 10 ** 6);
+    assert.ok(-usdcChange <= swapAmount.toNumber() / 10 ** 6);
   });
 
   it("Swaps from Token A to USDC", async () => {
@@ -216,7 +361,7 @@ describe("swap", () => {
     assert.ok(tokenAChange === -swapAmount);
     // TODO: calculate this dynamically from the swap amount.
     assert.ok(tokenBChange === 9.8);
-    assert.ok(usdcChange === 0);
+    assert.ok(usdcChange >= 0);
   });
 
   it("Swaps from Token B to Token A", async () => {
@@ -277,7 +422,7 @@ describe("swap", () => {
     // TODO: calculate this dynamically from the swap amount.
     assert.ok(tokenAChange === 22.6);
     assert.ok(tokenBChange === -swapAmount);
-    assert.ok(usdcChange === 0);
+    assert.ok(usdcChange >= 0);
   });
 });
 
