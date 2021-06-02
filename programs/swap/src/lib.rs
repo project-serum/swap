@@ -91,6 +91,7 @@ pub mod swap {
             min_exchange_rate,
             from_amount,
             to_amount,
+            quote_amount: 0,
             spill_amount: 0,
             from_mint: token::accessor::mint(from_token)?,
             to_mint: token::accessor::mint(to_token)?,
@@ -150,7 +151,7 @@ pub mod swap {
         };
 
         // Leg 2: Buy Token B with USD(x) (or whatever quote currency is used).
-        let (to_amount, spill_amount) = {
+        let (to_amount, buy_proceeds) = {
             // Token balances before the trade.
             let base_before = token::accessor::amount(&ctx.accounts.to.coin_wallet)?;
             let quote_before = token::accessor::amount(&ctx.accounts.pc_wallet)?;
@@ -171,12 +172,17 @@ pub mod swap {
             )
         };
 
+        // The amount of surplus quote currency *not* fully consumed by the
+        // second half of the swap.
+        let spill_amount = sell_proceeds.checked_sub(buy_proceeds).unwrap();
+
         // Safety checks.
         apply_risk_checks(DidSwap {
             given_amount: amount,
             min_exchange_rate,
             from_amount,
             to_amount,
+            quote_amount: sell_proceeds,
             spill_amount,
             from_mint: token::accessor::mint(&ctx.accounts.from.coin_wallet)?,
             to_mint: token::accessor::mint(&ctx.accounts.to.coin_wallet)?,
@@ -192,6 +198,16 @@ pub mod swap {
 fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
     emit!(event);
 
+    let spill_deduction = {
+        if event.spill_amount == 0 || event.min_exchange_rate.strict {
+            0
+        } else {
+            (event.from_amount.checked_mul(event.spill_amount).unwrap())
+                .checked_div(event.quote_amount)
+                .unwrap()
+        }
+    };
+
     let (to_amount, min_expected_amount) = {
         // Use the exchange rate to calculate the client's expectation.
         // This number has
@@ -199,7 +215,7 @@ fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
         // `decimals(from_mint) + decimals(to_mint`)`
         //
         // decimal places.
-        let min_expected_amount = (event.from_amount as u128)
+        let min_expected_amount = (event.from_amount.checked_sub(spill_deduction).unwrap() as u128)
             .checked_mul(event.min_exchange_rate.rate as u128)
             .unwrap();
 
@@ -577,6 +593,9 @@ pub struct DidSwap {
     pub from_amount: u64,
     // Amount of the `to` token purchased.
     pub to_amount: u64,
+    // The amount of the quote currency used for a transitive swap. This is the
+    // amount *received* for selling on the first leg of the swap.
+    pub quote_amount: u64,
     // Amount of the quote currency accumulated from the swap.
     pub spill_amount: u64,
     // Mint sold.
@@ -599,6 +618,27 @@ pub struct ExchangeRate {
     rate: u64,
     // Number of decimals of the *from* token's mint.
     decimals: u8,
+    // Number opf decimals of the *quote* token for a transitive swap.
+    quote_decimals: u8,
+    // True if *all* of the *from* currency sold should be used when calculating
+    // the executed exchange rate.
+    //
+    // To perform a transitive swap, one sells on one market and buys on
+    // another, where both markets are quoted in the same currency. Now suppose
+    // one swaps A for B across A/USDC and B/USDC. Further suppose the first
+    // leg swaps the entire *from* amount A for USDC, and then only have of
+    // the USDC is used to swap for B on the second leg. How should we calculate
+    // the exchange rate?
+    //
+    // If strict is true, then the exchange rate will be calculated as a direct
+    // function of the A tokens lost and B tokens gained, ignoring the surplus
+    // in USDC received. If strict is false, an effective exchange rate will be
+    // used. I.e. the surplus in USDC will be marked at the exchange rate from
+    // the first leg of the swap and that amount will be deducted from the
+    // *from* mint before calculating the exchange rate.
+    //
+    // Transitive swaps only. For direct swaps, this field is ignored.
+    strict: bool,
 }
 
 #[error]
