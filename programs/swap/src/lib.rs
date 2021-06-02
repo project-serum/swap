@@ -198,17 +198,17 @@ pub mod swap {
 fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
     emit!(event);
 
-    let spill_deduction = {
-        if event.spill_amount == 0 || event.min_exchange_rate.strict {
-            0
-        } else {
-            (event.from_amount.checked_mul(event.spill_amount).unwrap())
-                .checked_div(event.quote_amount)
-                .unwrap()
-        }
-    };
-
     let (to_amount, min_expected_amount) = {
+        // If there is spill (i.e. quote tokens *not* fully consumed)
+        let spill_deduction = {
+            if event.spill_amount == 0 || event.min_exchange_rate.strict {
+                0
+            } else {
+                (event.from_amount.checked_mul(event.spill_amount).unwrap())
+                    .checked_div(event.quote_amount)
+                    .unwrap()
+            }
+        };
         // Use the exchange rate to calculate the client's expectation.
         // This number has
         //
@@ -618,8 +618,6 @@ pub struct ExchangeRate {
     rate: u64,
     // Number of decimals of the *from* token's mint.
     decimals: u8,
-    // Number opf decimals of the *quote* token for a transitive swap.
-    quote_decimals: u8,
     // True if *all* of the *from* currency sold should be used when calculating
     // the executed exchange rate.
     //
