@@ -55,6 +55,11 @@ pub mod swap {
         amount: u64,
         min_exchange_rate: ExchangeRate,
     ) -> Result<()> {
+        let mut min_exchange_rate = min_exchange_rate;
+
+        // Not used for direct swaps.
+        min_exchange_rate.quote_decimals = 0;
+
         // Optional referral account (earns a referral fee).
         let referral = ctx.remaining_accounts.iter().next().map(Clone::clone);
 
@@ -91,6 +96,7 @@ pub mod swap {
             min_exchange_rate,
             from_amount,
             to_amount,
+            quote_amount: 0,
             spill_amount: 0,
             from_mint: token::accessor::mint(from_token)?,
             to_mint: token::accessor::mint(to_token)?,
@@ -150,7 +156,7 @@ pub mod swap {
         };
 
         // Leg 2: Buy Token B with USD(x) (or whatever quote currency is used).
-        let (to_amount, spill_amount) = {
+        let (to_amount, buy_proceeds) = {
             // Token balances before the trade.
             let base_before = token::accessor::amount(&ctx.accounts.to.coin_wallet)?;
             let quote_before = token::accessor::amount(&ctx.accounts.pc_wallet)?;
@@ -171,12 +177,17 @@ pub mod swap {
             )
         };
 
+        // The amount of surplus quote currency *not* fully consumed by the
+        // second half of the swap.
+        let spill_amount = sell_proceeds.checked_sub(buy_proceeds).unwrap();
+
         // Safety checks.
         apply_risk_checks(DidSwap {
             given_amount: amount,
             min_exchange_rate,
             from_amount,
             to_amount,
+            quote_amount: sell_proceeds,
             spill_amount,
             from_mint: token::accessor::mint(&ctx.accounts.from.coin_wallet)?,
             to_mint: token::accessor::mint(&ctx.accounts.to.coin_wallet)?,
@@ -188,42 +199,110 @@ pub mod swap {
     }
 }
 
-// Asserts the swap event is valid.
-fn apply_risk_checks<'info>(event: DidSwap) -> Result<()> {
+// Asserts the swap event executed at an exchange rate acceptable to the client.
+fn apply_risk_checks(event: DidSwap) -> Result<()> {
     emit!(event);
 
-    let (to_amount, min_expected_amount) = {
-        // Use the exchange rate to calculate the client's expectation.
-        // This number has
-        //
-        // `decimals(from_mint) + decimals(to_mint`)`
-        //
-        // decimal places.
-        let min_expected_amount = (event.from_amount as u128)
-            .checked_mul(event.min_exchange_rate.rate as u128)
-            .unwrap();
+    // Use the exchange rate to calculate the client's expectation.
+    //
+    // The exchange rate given must always have decimals equal to the
+    // `to_mint` decimals, guaranteeing the `min_expected_amount`
+    // always has decimals equal to
+    //
+    // `decimals(from_mint) + decimals(to_mint) + decimals(quote_mint)`.
+    //
+    // We avoid truncating by adding `decimals(quote_mint)`.
+    let min_expected_amount = u128::from(
+        // decimals(from).
+        event.from_amount,
+    )
+    .checked_mul(
+        // decimals(from + to).
+        event.min_exchange_rate.rate.into(),
+    )
+    .unwrap()
+    .checked_mul(
+        // decimals(from + to + quote).
+        10u128
+            .checked_pow(event.min_exchange_rate.quote_decimals.into())
+            .unwrap(),
+    )
+    .unwrap();
 
-        // Translate the `to_amount` into a common number of decimals with
-        // `min_expected_amount`.
+    // If there is spill (i.e. quote tokens *not* fully consumed for
+    // the buy side of a transitive swap), then credit those tokens marked
+    // at the executed exchange rate to create an "effective" to_amount.
+    let effective_to_amount = {
+        // Translates the leftover spill amount into "to" units via
         //
-        // The exchange rate given must always have decimals equal to the
-        // `to_mint` decimals, guaranteeing the `min_expected_amount`
-        // always has decimals equal to
+        // `(to_amount_received/quote_amount_given) * spill_amount`
         //
-        // `decimals(from_mint) + decimals(to_mint)`.
-        //
-        let to_amount = u128::from(event.to_amount)
+        let spill_surplus = match event.spill_amount == 0 || event.min_exchange_rate.strict {
+            true => 0,
+            false => u128::from(
+                // decimals(to).
+                event.to_amount,
+            )
             .checked_mul(
+                // decimals(to + quote).
+                event.spill_amount.into(),
+            )
+            .unwrap()
+            .checked_mul(
+                // decimals(to + quote + from).
                 10u128
-                    .checked_pow(event.min_exchange_rate.decimals.into())
+                    .checked_pow(event.min_exchange_rate.from_decimals.into())
                     .unwrap(),
             )
-            .unwrap();
-        (to_amount, min_expected_amount)
+            .unwrap()
+            .checked_mul(
+                // decimals(to + quote*2 + from).
+                10u128
+                    .checked_pow(event.min_exchange_rate.quote_decimals.into())
+                    .unwrap(),
+            )
+            .unwrap()
+            .checked_div(
+                // decimals(to + quote + from).
+                event
+                    .quote_amount
+                    .checked_sub(event.spill_amount)
+                    .unwrap()
+                    .into(),
+            )
+            .unwrap(),
+        };
+
+        // Translate the `to_amount` into a common number of decimals.
+        let to_amount = u128::from(
+            // decimals(to).
+            event.to_amount,
+        )
+        .checked_mul(
+            // decimals(to + from).
+            10u128
+                .checked_pow(event.min_exchange_rate.from_decimals.into())
+                .unwrap(),
+        )
+        .unwrap()
+        .checked_mul(
+            // decimals(to + from + quote).
+            10u128
+                .checked_pow(event.min_exchange_rate.quote_decimals.into())
+                .unwrap(),
+        )
+        .unwrap();
+
+        to_amount.checked_add(spill_surplus).unwrap()
     };
 
     // Abort if the resulting amount is less than the client's expectation.
-    if to_amount < min_expected_amount {
+    if effective_to_amount < min_expected_amount {
+        msg!(
+            "effective_to_amount, min_expected_amount: {:?}, {:?}",
+            effective_to_amount,
+            min_expected_amount,
+        );
         return Err(ErrorCode::SlippageExceeded.into());
     }
 
@@ -568,16 +647,22 @@ fn _is_valid_swap<'info>(from: &AccountInfo<'info>, to: &AccountInfo<'info>) -> 
 // markets (quoted in the same token).
 #[event]
 pub struct DidSwap {
-    // User given (max) amount to swap.
+    // User given (max) amount  of the "from" token to swap.
     pub given_amount: u64,
     // The minimum exchange rate for swapping `from_amount` to `to_amount` in
-    // native units with decimals equal to the `to_amount`'s mint.
+    // native units with decimals equal to the `to_amount`'s mint--specified
+    // by the client.
     pub min_exchange_rate: ExchangeRate,
     // Amount of the `from` token sold.
     pub from_amount: u64,
     // Amount of the `to` token purchased.
     pub to_amount: u64,
-    // Amount of the quote currency accumulated from the swap.
+    // The amount of the quote currency used for a *transitive* swap. This is
+    // the amount *received* for selling on the first leg of the swap.
+    pub quote_amount: u64,
+    // Amount of the quote currency accumulated from a *transitive* swap, i.e.,
+    // the difference between the amount gained from the first leg of the swap
+    // (to sell) and the amount used in the second leg of the swap (to buy).
     pub spill_amount: u64,
     // Mint sold.
     pub from_mint: Pubkey,
@@ -598,7 +683,29 @@ pub struct ExchangeRate {
     // as the *to* mint.
     rate: u64,
     // Number of decimals of the *from* token's mint.
-    decimals: u8,
+    from_decimals: u8,
+    // Number of decimals of the *to* token's mint.
+    // For a direct swap, this should be zero.
+    quote_decimals: u8,
+    // True if *all* of the *from* currency sold should be used when calculating
+    // the executed exchange rate.
+    //
+    // To perform a transitive swap, one sells on one market and buys on
+    // another, where both markets are quoted in the same currency. Now suppose
+    // one swaps A for B across A/USDC and B/USDC. Further suppose the first
+    // leg swaps the entire *from* amount A for USDC, and then only half of
+    // the USDC is used to swap for B on the second leg. How should we calculate
+    // the exchange rate?
+    //
+    // If strict is true, then the exchange rate will be calculated as a direct
+    // function of the A tokens lost and B tokens gained, ignoring the surplus
+    // in USDC received. If strict is false, an effective exchange rate will be
+    // used. I.e. the surplus in USDC will be marked at the exchange rate from
+    // the second leg of the swap and that amount will be added to the
+    // *to* mint received before calculating the swap's exchange rate.
+    //
+    // Transitive swaps only. For direct swaps, this field is ignored.
+    strict: bool,
 }
 
 #[error]
