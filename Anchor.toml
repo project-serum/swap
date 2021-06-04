@@ -2,6 +2,9 @@
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
+[clusters.mainnet]
+swap = "22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD"
+
 [[test.genesis]]
 address = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
 program = "./deps/serum-dex/dex/target/deploy/serum_dex.so"
