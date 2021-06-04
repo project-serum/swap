@@ -242,7 +242,7 @@ describe("swap", () => {
         await program.rpc.swap(
           Side.Bid,
           swapAmount,
-          { rate: new BN(1.0), decimals: 6 },
+          { rate: new BN(1.0), fromDecimals: 6, toDecimals: 6, strict: false },
           {
             accounts: SWAP_USDC_A_ACCOUNTS,
             instructions: [
@@ -291,7 +291,12 @@ describe("swap", () => {
         await program.rpc.swap(
           Side.Ask,
           new BN(swapAmount * 10 ** 6),
-          { rate: new BN(5 * 10 ** 6), decimals: 6 },
+          {
+            rate: new BN(5 * 10 ** 6),
+            fromDecimals: 6,
+            toDecimals: 6,
+            strict: false,
+          },
           {
             accounts: SWAP_A_USDC_ACCOUNTS,
           }
@@ -314,7 +319,12 @@ describe("swap", () => {
         // Perform the actual swap.
         await program.rpc.swapTransitive(
           new BN(swapAmount * 10 ** 6),
-          { rate: new BN(0.98 * 10 ** 6), decimals: 6 },
+          {
+            rate: new BN(0.98 * 10 ** 6),
+            fromDecimals: 6,
+            toDecimals: 6,
+            strict: false,
+          },
           {
             accounts: {
               from: {
@@ -375,7 +385,12 @@ describe("swap", () => {
         // Perform the actual swap.
         await program.rpc.swapTransitive(
           new BN(swapAmount * 10 ** 6),
-          { rate: new BN(0.9 * 10 ** 6), decimals: 6 },
+          {
+            rate: new BN(0.9 * 10 ** 6),
+            fromDecimals: 6,
+            toDecimals: 6,
+            strict: false,
+          },
           {
             accounts: {
               from: {
