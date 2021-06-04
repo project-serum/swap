@@ -217,12 +217,12 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
         event.from_amount,
     )
     .checked_mul(
-        // decimals(from + to).
+        // decimals(from) + decimals(to).
         event.min_exchange_rate.rate.into(),
     )
     .unwrap()
     .checked_mul(
-        // decimals(from + to + quote).
+        // decimals(from) + decimals(to) + decimals(quote).
         10u128
             .checked_pow(event.min_exchange_rate.quote_decimals.into())
             .unwrap(),
@@ -244,26 +244,26 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
                 event.to_amount,
             )
             .checked_mul(
-                // decimals(to + quote).
+                // decimals(to) + decimals(quote).
                 event.spill_amount.into(),
             )
             .unwrap()
             .checked_mul(
-                // decimals(to + quote + from).
+                // decimals(to) + decimals(quote) + decimals(from).
                 10u128
                     .checked_pow(event.min_exchange_rate.from_decimals.into())
                     .unwrap(),
             )
             .unwrap()
             .checked_mul(
-                // decimals(to + quote*2 + from).
+                // decimals(to) + decimals(quote)*2 + decimals(from).
                 10u128
                     .checked_pow(event.min_exchange_rate.quote_decimals.into())
                     .unwrap(),
             )
             .unwrap()
             .checked_div(
-                // decimals(to + quote + from).
+                // decimals(to) + decimals(quote) + decimals(from).
                 event
                     .quote_amount
                     .checked_sub(event.spill_amount)
@@ -279,14 +279,14 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
             event.to_amount,
         )
         .checked_mul(
-            // decimals(to + from).
+            // decimals(to) + decimals(from).
             10u128
                 .checked_pow(event.min_exchange_rate.from_decimals.into())
                 .unwrap(),
         )
         .unwrap()
         .checked_mul(
-            // decimals(to + from + quote).
+            // decimals(to) + decimals(from) + decimals(quote).
             10u128
                 .checked_pow(event.min_exchange_rate.quote_decimals.into())
                 .unwrap(),
