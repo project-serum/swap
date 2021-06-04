@@ -201,7 +201,12 @@ pub mod swap {
 
 // Asserts the swap event executed at an exchange rate acceptable to the client.
 fn apply_risk_checks(event: DidSwap) -> Result<()> {
+    // Emit the event for client consumption.
     emit!(event);
+
+    if event.to_amount == 0 {
+        return Err(ErrorCode::ZeroSwap.into());
+    }
 
     // Use the exchange rate to calculate the client's expectation.
     //
@@ -714,4 +719,6 @@ pub enum ErrorCode {
     SwapTokensCannotMatch,
     #[msg("Slippage tolerance exceeded")]
     SlippageExceeded,
+    #[msg("No tokens received when swapping")]
+    ZeroSwap,
 }
