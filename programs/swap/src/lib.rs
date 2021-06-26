@@ -13,7 +13,10 @@ use anchor_spl::dex::serum_dex::instruction::SelfTradeBehavior;
 use anchor_spl::dex::serum_dex::matching::{OrderType, Side as SerumSide};
 use anchor_spl::dex::serum_dex::state::MarketState;
 use anchor_spl::token;
+use solana_program::declare_id;
 use std::num::NonZeroU64;
+
+declare_id!("22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD");
 
 #[program]
 pub mod swap {
@@ -364,16 +367,16 @@ impl<'info> From<&mut CloseAccount<'info>> for dex::CloseOpenOrders<'info> {
 // done by the DEX on CPI.
 #[derive(Accounts)]
 pub struct Swap<'info> {
-    market: MarketAccounts<'info>,
+    pub market: MarketAccounts<'info>,
     #[account(signer)]
-    authority: AccountInfo<'info>,
+    pub authority: AccountInfo<'info>,
     #[account(mut)]
-    pc_wallet: AccountInfo<'info>,
+    pub pc_wallet: AccountInfo<'info>,
     // Programs.
-    dex_program: AccountInfo<'info>,
-    token_program: AccountInfo<'info>,
+    pub dex_program: AccountInfo<'info>,
+    pub token_program: AccountInfo<'info>,
     // Sysvars.
-    rent: AccountInfo<'info>,
+    pub rent: AccountInfo<'info>,
 }
 
 impl<'info> From<&Swap<'info>> for OrderbookClient<'info> {
@@ -395,18 +398,18 @@ impl<'info> From<&Swap<'info>> for OrderbookClient<'info> {
 // the same on both markets since there's only one account field for it).
 #[derive(Accounts)]
 pub struct SwapTransitive<'info> {
-    from: MarketAccounts<'info>,
-    to: MarketAccounts<'info>,
+    pub from: MarketAccounts<'info>,
+    pub to: MarketAccounts<'info>,
     // Must be the authority over all open orders accounts used.
     #[account(signer)]
-    authority: AccountInfo<'info>,
+    pub authority: AccountInfo<'info>,
     #[account(mut)]
-    pc_wallet: AccountInfo<'info>,
+    pub pc_wallet: AccountInfo<'info>,
     // Programs.
-    dex_program: AccountInfo<'info>,
-    token_program: AccountInfo<'info>,
+    pub dex_program: AccountInfo<'info>,
+    pub token_program: AccountInfo<'info>,
     // Sysvars.
-    rent: AccountInfo<'info>,
+    pub rent: AccountInfo<'info>,
 }
 
 impl<'info> SwapTransitive<'info> {
@@ -581,36 +584,36 @@ fn coin_lots(market: &MarketState, size: u64) -> u64 {
 #[derive(Accounts, Clone)]
 pub struct MarketAccounts<'info> {
     #[account(mut)]
-    market: AccountInfo<'info>,
+    pub market: AccountInfo<'info>,
     #[account(mut)]
-    open_orders: AccountInfo<'info>,
+    pub open_orders: AccountInfo<'info>,
     #[account(mut)]
-    request_queue: AccountInfo<'info>,
+    pub request_queue: AccountInfo<'info>,
     #[account(mut)]
-    event_queue: AccountInfo<'info>,
+    pub event_queue: AccountInfo<'info>,
     #[account(mut)]
-    bids: AccountInfo<'info>,
+    pub bids: AccountInfo<'info>,
     #[account(mut)]
-    asks: AccountInfo<'info>,
+    pub asks: AccountInfo<'info>,
     // The `spl_token::Account` that funds will be taken from, i.e., transferred
     // from the user into the market's vault.
     //
     // For bids, this is the base currency. For asks, the quote.
     #[account(mut)]
-    order_payer_token_account: AccountInfo<'info>,
+    pub order_payer_token_account: AccountInfo<'info>,
     // Also known as the "base" currency. For a given A/B market,
     // this is the vault for the A mint.
     #[account(mut)]
-    coin_vault: AccountInfo<'info>,
+    pub coin_vault: AccountInfo<'info>,
     // Also known as the "quote" currency. For a given A/B market,
     // this is the vault for the B mint.
     #[account(mut)]
-    pc_vault: AccountInfo<'info>,
+    pub pc_vault: AccountInfo<'info>,
     // PDA owner of the DEX's token accounts for base + quote currencies.
-    vault_signer: AccountInfo<'info>,
+    pub vault_signer: AccountInfo<'info>,
     // User wallets.
     #[account(mut)]
-    coin_wallet: AccountInfo<'info>,
+    pub coin_wallet: AccountInfo<'info>,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
@@ -686,12 +689,12 @@ pub struct ExchangeRate {
     // The amount of *to* tokens one should receive for a single *from token.
     // This number must be in native *to* units with the same amount of decimals
     // as the *to* mint.
-    rate: u64,
+    pub rate: u64,
     // Number of decimals of the *from* token's mint.
-    from_decimals: u8,
+    pub from_decimals: u8,
     // Number of decimals of the *to* token's mint.
     // For a direct swap, this should be zero.
-    quote_decimals: u8,
+    pub quote_decimals: u8,
     // True if *all* of the *from* currency sold should be used when calculating
     // the executed exchange rate.
     //
@@ -710,7 +713,7 @@ pub struct ExchangeRate {
     // *to* mint received before calculating the swap's exchange rate.
     //
     // Transitive swaps only. For direct swaps, this field is ignored.
-    strict: bool,
+    pub strict: bool,
 }
 
 #[error]
