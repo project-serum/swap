@@ -15,6 +15,8 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.9.0"
-anchor-spl = "0.9.0"
+#anchor-lang = "0.9.0"
+#anchor-spl = "0.9.0"
+anchor-lang = { path = "../../../../../../lang" }
+anchor-spl = { path = "../../../../../../spl" }
 solana-program = "1.7.1"
