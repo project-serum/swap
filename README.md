@@ -1,5 +1,8 @@
 # Swap
 
+[![Crates.io](https://img.shields.io/crates/v/serum-swap?color=blue)](https://crates.io/crates/serum-swap)
+[![Docs.rs](https://docs.rs/serum-swap/badge.svg)](https://docs.rs/serum-swap)
+
 Swap provides a convenient API to the Serum DEX for performing instantly
 settled token swaps directly on the order book.
 
