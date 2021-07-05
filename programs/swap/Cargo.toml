@@ -1,6 +1,6 @@
 [package]
 name = "serum-swap"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 edition = "2018"
 license = "Apache-2.0"
 description = "Swap on the Serum DEX"
@@ -9,7 +9,7 @@ repository = "https://github.com/project-serum/swap"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-name = "swap"
+name = "serum_swap"
 
 [features]
 no-entrypoint = []
