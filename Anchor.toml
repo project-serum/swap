@@ -1,9 +1,21 @@
+anchor_version = "0.12.0"
+solana_version = "1.7.6"
+
+[workspace]
+members = [
+    "programs/swap",
+]
+
+[registry]
+url = "https://anchor.projectserum.com"
+
 [provider]
-cluster = "localnet"
+cluster = "mainnet"
 wallet = "~/.config/solana/id.json"
 
-[clusters.mainnet]
-swap = "22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD"
+[programs.mainnet]
+serum_swap = { address = "22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD", path = "./target/deploy/serum_swap.so", idl = "./target/idl/swap.json" }
+serum_dex = { address = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin", path = "./deps/serum-dex/dex/target/deploy/serum_dex.so" }
 
 [[test.genesis]]
 address = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin"
