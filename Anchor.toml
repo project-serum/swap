@@ -6,7 +6,7 @@ members = [
 ]
 
 [provider]
-cluster = "mainnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [programs.mainnet]
