@@ -19,7 +19,7 @@ use std::num::NonZeroU64;
 declare_id!("22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD");
 
 #[program]
-pub mod swap {
+pub mod serum_swap {
     use super::*;
 
     /// Convenience API to initialize an open orders account on the Serum DEX.
