@@ -5,8 +5,8 @@ rust:
 env:
   global:
     - NODE_VERSION="v14.7.0"
-    - SOLANA_VERSION="v1.6.9"
-    - ANCHOR_VERSION="v0.7.0"
+    - SOLANA_VERSION="v1.7.8"
+    - ANCHOR_VERSION="v0.13.0"
 git:
   submodules: true
 
