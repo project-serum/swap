@@ -18,6 +18,12 @@ use std::num::NonZeroU64;
 
 declare_id!("22Y43yTVxuUkoRKdm9thyRhQ3SdgQS7c7kB6UNCiaczD");
 
+// Associated token account for Pubkey::default.
+mod empty {
+    use super::*;
+    declare_id!("HJt8Tjdsc9ms9i4WCZEzhzr4oyf3ANcdzXrNdLPFqm3M");
+}
+
 #[program]
 pub mod serum_swap {
     use super::*;
@@ -370,7 +376,7 @@ pub struct Swap<'info> {
     pub market: MarketAccounts<'info>,
     #[account(signer)]
     pub authority: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = pc_wallet.key != &empty::ID)]
     pub pc_wallet: AccountInfo<'info>,
     // Programs.
     pub dex_program: AccountInfo<'info>,
@@ -403,7 +409,7 @@ pub struct SwapTransitive<'info> {
     // Must be the authority over all open orders accounts used.
     #[account(signer)]
     pub authority: AccountInfo<'info>,
-    #[account(mut)]
+    #[account(mut, constraint = pc_wallet.key != &empty::ID)]
     pub pc_wallet: AccountInfo<'info>,
     // Programs.
     pub dex_program: AccountInfo<'info>,
@@ -612,7 +618,7 @@ pub struct MarketAccounts<'info> {
     // PDA owner of the DEX's token accounts for base + quote currencies.
     pub vault_signer: AccountInfo<'info>,
     // User wallets.
-    #[account(mut)]
+    #[account(mut, constraint = coin_wallet.key != &empty::ID)]
     pub coin_wallet: AccountInfo<'info>,
 }
 

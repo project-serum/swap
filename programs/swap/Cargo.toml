@@ -18,6 +18,15 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.13.0"
-anchor-spl = "0.13.0"
-solana-program = "=1.7.8"
+anchor-lang = "0.17.0"
+anchor-spl = "0.17.0"
+solana-program = "=1.7.11"
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
