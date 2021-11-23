@@ -605,7 +605,7 @@ pub struct MarketAccounts<'info> {
     // from the user into the market's vault.
     //
     // For bids, this is the base currency. For asks, the quote.
-    #[account(mut)]
+    #[account(mut, constraint = coin_wallet.key != &empty::ID)]
     pub order_payer_token_account: AccountInfo<'info>,
     // Also known as the "base" currency. For a given A/B market,
     // this is the vault for the A mint.
