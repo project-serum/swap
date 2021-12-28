@@ -69,8 +69,8 @@ pub mod serum_swap {
         // Not used for direct swaps.
         min_exchange_rate.quote_decimals = 0;
 
-        // Optional referral account (earns a referral fee).
-        let referral = ctx.remaining_accounts.iter().next().map(Clone::clone);
+        // Optional referrer account (earns a referrer fee).
+        let referrer = ctx.remaining_accounts.iter().next().map(Clone::clone);
 
         // Side determines swap direction.
         let (from_token, to_token) = match side {
@@ -88,7 +88,7 @@ pub mod serum_swap {
             Side::Bid => orderbook.buy(amount, None)?,
             Side::Ask => orderbook.sell(amount, None)?,
         };
-        orderbook.settle(referral)?;
+        orderbook.settle(referrer)?;
 
         // Token balances after the trade.
         let from_amount_after = token::accessor::amount(from_token)?;
@@ -139,8 +139,8 @@ pub mod serum_swap {
         amount: u64,
         min_exchange_rate: ExchangeRate,
     ) -> Result<()> {
-        // Optional referral account (earns a referral fee).
-        let referral = ctx.remaining_accounts.iter().next().map(Clone::clone);
+        // Optional referrer account (earns a referrer fee).
+        let referrer = ctx.remaining_accounts.iter().next().map(Clone::clone);
 
         // Leg 1: Sell Token A for USD(x) (or whatever quote currency is used).
         let (from_amount, sell_proceeds) = {
@@ -151,7 +151,7 @@ pub mod serum_swap {
             // Execute the trade.
             let orderbook = ctx.accounts.orderbook_from();
             orderbook.sell(amount, None)?;
-            orderbook.settle(referral.clone())?;
+            orderbook.settle(referrer.clone())?;
 
             // Token balances after the trade.
             let base_after = token::accessor::amount(&ctx.accounts.from.coin_wallet)?;
@@ -173,7 +173,7 @@ pub mod serum_swap {
             // Execute the trade.
             let orderbook = ctx.accounts.orderbook_to();
             orderbook.buy(sell_proceeds, None)?;
-            orderbook.settle(referral)?;
+            orderbook.settle(referrer)?;
 
             // Token balances after the trade.
             let base_after = token::accessor::amount(&ctx.accounts.to.coin_wallet)?;
@@ -508,7 +508,7 @@ impl<'info> OrderbookClient<'info> {
     // * `max_native_pc_qty` - the max number of quote currency in native token
     //                         units (includes decimals).
     // * `side` - bid or ask, i.e. the type of order.
-    // * `referral` - referral account, earning a fee.
+    // * `srm_msrm_discount` - token account to calculate fee discount.
     fn order_cpi(
         &self,
         limit_price: u64,
@@ -541,7 +541,7 @@ impl<'info> OrderbookClient<'info> {
         )
     }
 
-    fn settle(&self, referral: Option<AccountInfo<'info>>) -> ProgramResult {
+    fn settle(&self, referrer: Option<AccountInfo<'info>>) -> ProgramResult {
         let settle_accs = dex::SettleFunds {
             market: self.market.market.clone(),
             open_orders: self.market.open_orders.clone(),
@@ -554,8 +554,8 @@ impl<'info> OrderbookClient<'info> {
             token_program: self.token_program.clone(),
         };
         let mut ctx = CpiContext::new(self.dex_program.clone(), settle_accs);
-        if let Some(referral) = referral {
-            ctx = ctx.with_remaining_accounts(vec![referral]);
+        if let Some(referrer) = referrer {
+            ctx = ctx.with_remaining_accounts(vec![referrer]);
         }
         dex::settle_funds(ctx)
     }
