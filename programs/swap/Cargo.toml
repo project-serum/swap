@@ -18,9 +18,9 @@ cpi = ["no-entrypoint"]
 default = []
 
 [dependencies]
-anchor-lang = "0.19.0"
-anchor-spl = { version = "0.19.0", features = ["dex"] }
-solana-program = "=1.8.5"
+anchor-lang = "0.20.1"
+anchor-spl = { version = "0.20.1", features = ["dex"] }
+solana-program = "1.9.4"
 
 [profile.release]
 lto = "fat"
