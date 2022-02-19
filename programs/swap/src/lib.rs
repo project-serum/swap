@@ -452,15 +452,12 @@ impl<'info> OrderbookClient<'info> {
     //
     // `base_amount` is the "native" amount of the base currency, i.e., token
     // amount including decimals.
-    fn sell(
-        &self,
-        base_amount: u64,
-        srm_msrm_discount: Option<AccountInfo<'info>>,
-    ) -> Result<()> {
+    fn sell(&self, base_amount: u64, srm_msrm_discount: Option<AccountInfo<'info>>) -> Result<()> {
         let limit_price = 1;
         let max_coin_qty = {
             // The loaded market must be dropped before CPI.
-            let market = MarketState::load(&self.market.market, &dex::ID).map_err(|de| ProgramError::from(de))?;
+            let market = MarketState::load(&self.market.market, &dex::ID)
+                .map_err(|de| ProgramError::from(de))?;
             coin_lots(&market, base_amount)
         };
         let max_native_pc_qty = u64::MAX;
@@ -478,11 +475,7 @@ impl<'info> OrderbookClient<'info> {
     //
     // `quote_amount` is the "native" amount of the quote currency, i.e., token
     // amount including decimals.
-    fn buy(
-        &self,
-        quote_amount: u64,
-        srm_msrm_discount: Option<AccountInfo<'info>>,
-    ) -> Result<()> {
+    fn buy(&self, quote_amount: u64, srm_msrm_discount: Option<AccountInfo<'info>>) -> Result<()> {
         let limit_price = u64::MAX;
         let max_coin_qty = u64::MAX;
         let max_native_pc_qty = quote_amount;
@@ -716,7 +709,7 @@ pub struct ExchangeRate {
     pub strict: bool,
 }
 
-#[error_codes]
+#[error_code]
 pub enum ErrorCode {
     #[msg("The tokens being swapped must have different mints")]
     SwapTokensCannotMatch,
