@@ -208,7 +208,7 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
     emit!(event);
 
     if event.to_amount == 0 {
-        return Err(ErrorCode::ZeroSwap.into());
+        return Err(error!(ErrorCode::ZeroSwap));
     }
 
     // Use the exchange rate to calculate the client's expectation.
@@ -311,7 +311,7 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
             effective_to_amount,
             min_expected_amount,
         );
-        return Err(ErrorCode::SlippageExceeded.into());
+        return Err(error!(ErrorCode::SlippageExceeded));
     }
 
     Ok(())
@@ -456,11 +456,11 @@ impl<'info> OrderbookClient<'info> {
         &self,
         base_amount: u64,
         srm_msrm_discount: Option<AccountInfo<'info>>,
-    ) -> ProgramResult {
+    ) -> Result<()> {
         let limit_price = 1;
         let max_coin_qty = {
             // The loaded market must be dropped before CPI.
-            let market = MarketState::load(&self.market.market, &dex::ID)?;
+            let market = MarketState::load(&self.market.market, &dex::ID).map_err(|de| ProgramError::from(de))?;
             coin_lots(&market, base_amount)
         };
         let max_native_pc_qty = u64::MAX;
@@ -482,7 +482,7 @@ impl<'info> OrderbookClient<'info> {
         &self,
         quote_amount: u64,
         srm_msrm_discount: Option<AccountInfo<'info>>,
-    ) -> ProgramResult {
+    ) -> Result<()> {
         let limit_price = u64::MAX;
         let max_coin_qty = u64::MAX;
         let max_native_pc_qty = quote_amount;
@@ -510,7 +510,7 @@ impl<'info> OrderbookClient<'info> {
         max_native_pc_qty: u64,
         side: Side,
         srm_msrm_discount: Option<AccountInfo<'info>>,
-    ) -> ProgramResult {
+    ) -> Result<()> {
         // Client order id is only used for cancels. Not used here so hardcode.
         let client_order_id = 0;
         // Limit is the dex's custom compute budge parameter, setting an upper
@@ -535,7 +535,7 @@ impl<'info> OrderbookClient<'info> {
         )
     }
 
-    fn settle(&self, referral: Option<AccountInfo<'info>>) -> ProgramResult {
+    fn settle(&self, referral: Option<AccountInfo<'info>>) -> Result<()> {
         let settle_accs = dex::SettleFunds {
             market: self.market.market.clone(),
             open_orders: self.market.open_orders.clone(),
@@ -646,7 +646,7 @@ fn _is_valid_swap<'info>(from: &AccountInfo<'info>, to: &AccountInfo<'info>) -> 
     let from_token_mint = token::accessor::mint(from)?;
     let to_token_mint = token::accessor::mint(to)?;
     if from_token_mint == to_token_mint {
-        return Err(ErrorCode::SwapTokensCannotMatch.into());
+        return Err(error!(ErrorCode::SwapTokensCannotMatch));
     }
     Ok(())
 }
@@ -716,7 +716,7 @@ pub struct ExchangeRate {
     pub strict: bool,
 }
 
-#[error]
+#[error_codes]
 pub enum ErrorCode {
     #[msg("The tokens being swapped must have different mints")]
     SwapTokensCannotMatch,
