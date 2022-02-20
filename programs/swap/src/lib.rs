@@ -208,7 +208,7 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
     emit!(event);
 
     if event.to_amount == 0 {
-        return Err(error!(ErrorCode::ZeroSwap));
+        return err!(ErrorCode::ZeroSwap);
     }
 
     // Use the exchange rate to calculate the client's expectation.
@@ -311,7 +311,7 @@ fn apply_risk_checks(event: DidSwap) -> Result<()> {
             effective_to_amount,
             min_expected_amount,
         );
-        return Err(error!(ErrorCode::SlippageExceeded));
+        return err!(ErrorCode::SlippageExceeded);
     }
 
     Ok(())
@@ -639,7 +639,7 @@ fn _is_valid_swap<'info>(from: &AccountInfo<'info>, to: &AccountInfo<'info>) -> 
     let from_token_mint = token::accessor::mint(from)?;
     let to_token_mint = token::accessor::mint(to)?;
     if from_token_mint == to_token_mint {
-        return Err(error!(ErrorCode::SwapTokensCannotMatch));
+        return err!(ErrorCode::SwapTokensCannotMatch);
     }
     Ok(())
 }
