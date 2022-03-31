@@ -212,7 +212,7 @@ describe("swap", () => {
     );
 
     // Send it.
-    await program.provider.send(tx, [openOrders]);
+    await program.provider.sendAndConfirm(tx, [openOrders]);
 
     // Balance after the transaction.
     const afterAccount = await program.provider.connection.getAccountInfo(
