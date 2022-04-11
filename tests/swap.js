@@ -13,7 +13,7 @@ const TAKER_FEE = 0.0022;
 
 describe("swap", () => {
   // Configure the client to use the local cluster.
-  anchor.setProvider(anchor.Provider.env());
+  anchor.setProvider(anchor.AnchorProvider.env());
 
   // Swap program client.
   const program = anchor.workspace.Swap;
@@ -212,7 +212,7 @@ describe("swap", () => {
     );
 
     // Send it.
-    await program.provider.send(tx, [openOrders]);
+    await program.provider.sendAndConfirm(tx, [openOrders]);
 
     // Balance after the transaction.
     const afterAccount = await program.provider.connection.getAccountInfo(
